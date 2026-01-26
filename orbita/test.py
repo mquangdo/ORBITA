@@ -8,8 +8,8 @@ from langchain.tools import tool
 
 IMAP_SERVER = "imap.gmail.com"
 SMTP_SERVER = "smtp.gmail.com"
-EMAIL_ADDRESS = "dominhquang02092004@gmail.com"
-APP_PASSWORD = "ndekffuzwhnobldp"
+EMAIL_ADDRESS = ""
+APP_PASSWORD = ""
 
 def fetch_emails_tool(k: int, target_email: str = None) -> list:
     """
