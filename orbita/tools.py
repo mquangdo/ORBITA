@@ -158,7 +158,7 @@ def get_month_range(timezone: str = DEFAULT_TIMEZONE) -> Tuple[datetime, datetim
 
 '''Budget/Hobby Agent section'''
 
-API_TOKEN = "OCBRTJ17MZRTAEW0S26SGICVYGIXZEIAEXKRNWQQHHCFYUYRVWYQML7FKO5KU9BN"  # Thay thế bằng API token thực tế của bạn
+API_TOKEN = ""  
 
 @tool
 def get_budget_tool(account_number: str) -> float:
@@ -169,9 +169,9 @@ def get_budget_tool(account_number: str) -> float:
     BASE_URL = "https://my.sepay.vn/userapi/transactions/list"
 
     PARAMS = {
-        "account_number": account_number,      # số tài khoản
-        "transaction_date_min": "2026-01-01",   # ngày bắt đầu
-        "transaction_date_max": "2026-01-31",   # ngày kết thúc
+        "account_number": account_number,      
+        "transaction_date_min": "2026-01-01",   
+        "transaction_date_max": "2026-01-31",   
         "limit": 1000
     }
 
