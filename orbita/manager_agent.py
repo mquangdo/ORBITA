@@ -1,157 +1,199 @@
 from typing import Annotated, Sequence, TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
 from dotenv import load_dotenv
-from email_agent import email_agent  
+from email_agent import email_agent
 from budget_agent import budget_agent
 from opik import configure
 from opik.integrations.langchain import OpikTracer
 from langgraph.checkpoint.memory import InMemorySaver
+from langchain_openai import ChatOpenAI
+from langgraph.store.memory import InMemoryStore
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
+from langchain_core.runnables import RunnableConfig
+from manager_memory import (
+    load_manager_memories,
+    decide_what_to_update,
+    update_profile_memory,
+    update_preferences_memory,
+    update_instructions_memory,
+    store,
+)
+import os
+import sys
 
+# Force UTF-8 output
+sys.stdout.reconfigure(encoding="utf-8")
 
-configure()
 load_dotenv()
 
 
 class ManagerState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
-    route: str 
+    route: str
+    memory_context: str
+    update_decision: dict
 
 
-llm_endpoint = HuggingFaceEndpoint(
-    repo_id="Qwen/Qwen2.5-7B-Instruct",
-    temperature=0.0,
-    max_new_tokens=128,
-)
+# Use same LLM as all agents
+llm = ChatNVIDIA(model="openai/gpt-oss-120b", temperature=0.2)
 
-llm = ChatHuggingFace(llm=llm_endpoint)
 
-manager_prompt = ChatPromptTemplate.from_messages([
-    ("system", """
-You are a helpful assistant and a manager. 
-1. If the user request is about email (sending/reading), respond ONLY with the word 'email'.
-2. If the user request is about budget, respond ONLY with the word 'budget'.
-3. For any other general questions, greetings, or normal conversation, answer the user directly in a friendly manner.
-"""),
-    ("human", "{input}")
-])
+# Runs at start of every conversation
+def load_memory(state: ManagerState, config: RunnableConfig):
+    """Load user memories to personalize responses"""
+    memory_data = load_manager_memories(state, config, store)
+    return {**memory_data, "messages": state["messages"]}
 
+
+# Enhanced router that uses memory
 def manager_router(state: ManagerState):
+    """Route with memory-aware context"""
+
     user_input = state["messages"][-1].content
+    memory_context = state.get("memory_context", "")
 
-    response = llm.invoke(
-        manager_prompt.format(input=user_input)
-    )
+    enriched_prompt = f"""
+    <user_profile>
+    {memory_context}
+    </user_profile>
     
-    decision = response.content.strip().lower()
+    User asked: {user_input}
+    """.strip()
 
-    if "email" in decision:
-        return {"route": "email"}
+    response = llm.invoke([HumanMessage(content=enriched_prompt)])
 
-    if "budget" in decision:
-        return {"route": "budget"}
-    
-    return {
-        "messages": [response], 
-        "route": "end"
-    }
-    
+    # Check if user asked about themselves
+    if "what is my name" in user_input.lower() or "who am i" in user_input.lower():
+        # Use memory to answer
+        if "name" in memory_context:
+            # Extract name from memory and respond directly
+            import json
+            import re
 
-def call_email_agent(state: ManagerState):
-    result = email_agent.invoke({
-        "messages": state["messages"]
-    })
+            try:
+                # Parse the memory context to find name
+                # memory_context contains: {'name': 'Quang', ...}
+                name_match = re.search(r"'name':\s*'([^']+)'", memory_context)
+                if name_match:
+                    name = name_match.group(1)
+                    return {
+                        "messages": [AIMessage(content=f"I remember you are {name}!")],
+                        "route": "end",
+                    }
+            except:
+                pass
 
-    final_message = result["messages"][-1]
+    # Normal routing
+    content = response.content.strip().lower()
+    if "email" in content:
+        return {"route": "email", "messages": state["messages"]}
+    if "budget" in content:
+        return {"route": "budget", "messages": state["messages"]}
 
-    return {"messages": [final_message]}
+    return {"messages": [response], "route": "end"}
 
-def call_budget_agent(state: ManagerState):
-    result = budget_agent.invoke({
-        "messages": state["messages"]
-    })
 
-    final_message = result["messages"][-1]
+# Runs after each sub-agent call
+def update_memory(state: ManagerState, config: RunnableConfig):
+    """Save what we learned from this interaction"""
 
-    return {"messages": [final_message]}
+    # Extract and save profile info
+    update_profile_memory(state, config, store)
 
-def build_manager_agent():    
+    # Extract and save preferences
+    update_preferences_memory(state, config, store)
+
+    # Extract and save system instructions
+    update_instructions_memory(state, config, store)
+
+    return {"messages": state["messages"]}
+
+
+def build_manager_agent():
     graph = StateGraph(ManagerState)
-    graph.add_node("router", manager_router)
-    graph.add_node("email_agent", call_email_agent)
-    graph.add_node("budget_agent", call_budget_agent)
-    graph.add_edge(START, "router")
 
+    # Add all nodes
+    graph.add_node("load_memory", load_memory)
+    graph.add_node("router", manager_router)
+    graph.add_node("email_agent", email_agent)
+    graph.add_node("budget_agent", budget_agent)
+    graph.add_node("update_memory", update_memory)
+
+    # Graph flow
+    graph.add_edge(START, "load_memory")
+    graph.add_edge("load_memory", "router")
+
+    # Route to appropriate sub-agent
     graph.add_conditional_edges(
         "router",
         lambda s: s["route"],
-        {
-            "email": "email_agent",
-            "budget": "budget_agent",   
-            "end": END,
-        }
+        {"email": "email_agent", "budget": "budget_agent", "end": "update_memory"},
     )
 
-    graph.add_edge("email_agent", END)
-    graph.add_edge("budget_agent", END)
-    
+    # After sub-agent, always update memory
+    graph.add_edge("email_agent", "update_memory")
+    graph.add_edge("budget_agent", "update_memory")
+
+    # After updating memory, end
+    graph.add_edge("update_memory", END)
+
     return graph.compile()
 
+
+# Compile once
 manager_agent = build_manager_agent()
 
+
+def safe_print(text):
+    """Print safely with UTF-8 encoding"""
+    print(text.encode("utf-8", errors="replace").decode("utf-8"))
+
+
 if __name__ == "__main__":
-    from langchain_core.messages import HumanMessage
-    project_name = 'ManagerAgent'
-    tracer = OpikTracer(graph=manager_agent.get_graph(xray=True), project_name=project_name) 
-    inputs = {
-        "messages": [
-            HumanMessage(content="Hello my name is Quang")
-        ]
-    }
-    
-    
-    result = manager_agent.invoke(
-        inputs,
-        config={
-            "callbacks": [tracer],
-            "configurable": {"thread_id": "1"} 
-        },
-    )
-    print(result["messages"])
-    
-    inputs = {
-        "messages": [
-            HumanMessage(content="What is my name?")
-        ]
-    }
-    
-    
-    result = manager_agent.invoke(
-        inputs,
-        config={
-            "callbacks": [tracer],
-            "configurable": {"thread_id": "1"} 
-        },
-    )
-    print(result["messages"])
-    
-    # config = {"configurable": {"thread_id": "1"}}
-    # while True:
-    #     user_input = input("User: ")
-    #     if user_input.lower() in ["exit", "quit"]:
-    #         break
+    # from langchain_core.messages import HumanMessage
+    # project_name = 'ManagerAgent'
+    # tracer = OpikTracer(graph=manager_agent.get_graph(xray=True), project_name=project_name)
+    # inputs = {
+    #     "messages": [
+    #         HumanMessage(content="Hello my name is Quang")
+    #     ]
+    # }
 
-    #     inputs = {
-    #         "messages": [
-    #             HumanMessage(content=user_input)
-    #         ]
-    #     }
+    # result = manager_agent.invoke(
+    #     inputs,
+    #     config={
+    #         "callbacks": [tracer],
+    #         "configurable": {"thread_id": "1"}
+    #     },
+    # )
+    # print(result["messages"])
 
-    #     result = manager_agent.invoke(inputs, config=config)
-    #     print("Manager Agent:", result['messages'][-1].content)
+    # inputs = {
+    #     "messages": [
+    #         HumanMessage(content="What is my name?")
+    #     ]
+    # }
 
+    # result = manager_agent.invoke(
+    #     inputs,
+    #     config={
+    #         "callbacks": [tracer],
+    #         "configurable": {"thread_id": "1"}
+    #     },
+    # )
+    # print(result["messages"])
 
+    config = {"configurable": {"thread_id": "1"}}
+    while True:
+        user_input = input("User: ")
+        if user_input.lower() in ["exit", "quit"]:
+            break
 
+        inputs = {"messages": [HumanMessage(content=user_input)]}
+
+        result = manager_agent.invoke(inputs, config=config)
+        print("Manager Agent:", result["messages"][-1].content)
