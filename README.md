@@ -2,7 +2,7 @@
 
 A personalized intelligent assistant built with LangGraph, featuring specialized agents for email management, calendar operations, and budget tracking.
 
-![](imf.png)
+![](img.png)
 
 ## 🏗️ Architecture
 
