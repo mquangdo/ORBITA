@@ -1,6 +1,7 @@
 # ORBITA - Multi-Agent AI Assistant
 
 A personalized intelligent assistant built with LangGraph, featuring specialized agents for email management, calendar operations, and budget tracking.
+
 ![](image01.png)
 
 ## 🏗️ Architecture
