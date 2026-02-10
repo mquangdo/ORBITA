@@ -2,14 +2,6 @@
 
 A personalized intelligent assistant built with LangGraph, featuring specialized agents for email management, calendar operations, and budget tracking.
 
-## 🚀 Features
-
-- **Multi-Agent System**: Specialized agents for Email, Calendar, and Budget management
-- **Intelligent Manager**: Routes tasks to appropriate specialized agents
-- **Memory System**: Personalizes responses based on user profile, preferences, and instructions
-- **Dual Interface**: Streamlit web UI and command-line interface
-- **ChatGPT-like Design**: Modern, responsive web interface
-- **Observability**: Integrated with Opik for tracing and monitoring
 
 ## 🏗️ Architecture
 
@@ -72,7 +64,7 @@ User Input → Manager Agent → Router → Specialized Agents
 
 ## 🎯 Usage
 
-### Option 1: Streamlit Web Interface (Recommended)
+### Streamlit Web Interface
 
 ```bash
 streamlit run streamlit_app.py
@@ -81,14 +73,6 @@ streamlit run streamlit_app.py
 The web interface provides a ChatGPT-like experience with:
 - Clean, modern UI
 - Real-time message streaming
-- Sidebar with project information
-- Responsive design
-
-### Option 2: Command Line Interface
-
-```bash
-python main.py
-```
 
 Interactive CLI with:
 - Direct conversation with ORBITA
@@ -183,36 +167,11 @@ Run tests after implementing code changes:
 python -m pytest tests/
 ```
 
-## 🚦 Troubleshooting
-
-### Common Issues
-
-1. **NVIDIA API Key Missing**
-   - Ensure `.env` file exists with valid API key
-   - Verify the key has access to selected model
-
-2. **Google Calendar Authentication**
-   - Check `client_secret.json` is valid
-   - Re-authorize if token expired
-   - Verify Calendar API is enabled in GCP
-
-3. **Streamlit UI Not Loading**
-   - Check port 8501 is available
-   - Verify all dependencies installed
-   - Review browser console for errors
-
-4. **Unicode Errors**
-   - The system is configured for UTF-8
-   - Ensure terminal supports UTF-8
-   - Windows: Check console encoding settings
 
 ## 📄 License
 
 This project is part of the ORBITA personal assistant suite.
 
-## 🤝 Contributing
-
-This is a personal project. For questions or feedback, please open an issue on GitHub.
 
 ## 📝 Version History
 
