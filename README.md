@@ -1,7 +1,7 @@
 # ORBITA - Multi-Agent AI Assistant
 
 A personalized intelligent assistant built with LangGraph, featuring specialized agents for email management, calendar operations, and budget tracking.
-
+![](image01.png)
 
 ## 🏗️ Architecture
 
@@ -171,14 +171,3 @@ python -m pytest tests/
 ## 📄 License
 
 This project is part of the ORBITA personal assistant suite.
-
-
-## 📝 Version History
-
-- v1.0 - Initial release with Manager, Email, Calendar, and Budget agents
-- v1.1 - Added Streamlit UI with ChatGPT-like interface
-- v1.2 - Integrated memory system for personalization
-
----
-
-**ORBITA** - "Omni-Responsive Bot for Intelligent Task Automation" 🚀
